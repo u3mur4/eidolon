@@ -133,7 +133,7 @@ func printFormattedLog(msg *types.LogMessage) {
 	defer printMutex.Unlock()
 
 	// Header
-	headerColor.Printf("PID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	headerColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)

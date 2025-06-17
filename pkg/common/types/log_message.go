@@ -6,6 +6,7 @@ import "time"
 type LogMessage struct {
 	Timestamp  time.Time
 	PID        int
+	PPID        int
 	Command    string
 	Args       []string
 	ExitCode   int

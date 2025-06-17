@@ -87,6 +87,7 @@ func main() {
 	msg := types.LogMessage{
 		Timestamp:  time.Now(),
 		PID:        os.Getpid(),
+		PPID:       os.Getppid(),
 		Command:    cmdName,
 		Args:       args,
 		ExitCode:   exitCode,
