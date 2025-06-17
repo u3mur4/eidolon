@@ -89,7 +89,7 @@ func printData(c *color.Color, title string, data []byte) {
 	if len(data) == 0 {
 		return
 	}
-	c.Printf("--- %s (%d bytes) ---\n", title, len(data))
+	c.Printf("%s (%d bytes)\n", title, len(data))
 	if isPrintable(data) {
 		c.Println(string(data))
 	} else {
@@ -120,13 +120,8 @@ func formatArgsForDisplay(args []string) string {
 			// This argument is either printable or empty. Keep it as is.
 			formattedArgs[i] = arg
 		}
-		
-		if strings.Contains(formattedArgs[i], "\n") {
-			formattedArgs[i] = strings.ReplaceAll(formattedArgs[i], "\n", "\\n")
-			if !strings.HasPrefix(formattedArgs[i], "\"") {
-				formattedArgs[i] = fmt.Sprintf("\"%s\"", formattedArgs[i])
-			}
-		}
+
+		formattedArgs[i] = fmt.Sprintf("|%s|", formattedArgs[i])
 	}
 
 	// Join the now-formatted arguments with spaces.
@@ -138,19 +133,17 @@ func printFormattedLog(msg *types.LogMessage) {
 	defer printMutex.Unlock()
 
 	// Header
-	headerColor.Println("==============================================================================")
-	headerColor.Printf(" PID: %d  |  CMD: %s  |  EXIT: %d  |  TIME: %s\n", msg.PID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
-	headerColor.Println("------------------------------------------------------------------------------")
+	headerColor.Printf("PID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)
-	cmdColor.Printf("$ %s %s\n", msg.Command, displayArgs)
+	cmdColor.Printf("%s %s\n", msg.Command, displayArgs)
 
 	// Stdin, Stdout, Stderr
 	printData(stdinColor, "STDIN", msg.StdinData)
 	printData(stdoutColor, "STDOUT", msg.StdoutData)
 	printData(stderrColor, "STDERR", msg.StderrData)
 
-	headerColor.Println("==============================================================================")
+	headerColor.Print(strings.Repeat("-", 80))
 	fmt.Println()
 }
