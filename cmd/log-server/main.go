@@ -64,10 +64,9 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-// isPrintable checks if a byte slice contains primarily printable characters.
-func isPrintable(data []byte) bool {
+func printableCount(data []byte) int {
 	if len(data) == 0 {
-		return true
+		return 0
 	}
 	printable := 0
 	for _, b := range data {
@@ -75,6 +74,12 @@ func isPrintable(data []byte) bool {
 			printable++
 		}
 	}
+	return printable
+}
+
+// isPrintable checks if a byte slice contains primarily printable characters.
+func isPrintable(data []byte) bool {
+	printable := printableCount(data)
 	// Consider it printable if >90% of characters are printable
 	return float64(printable)/float64(len(data)) > 0.9
 }
@@ -92,6 +97,42 @@ func printData(c *color.Color, title string, data []byte) {
 	}
 }
 
+// formatArgsForDisplay takes a slice of string arguments and formats them for display.
+// If an argument contains no printable characters (but is not empty), it is
+// converted to a quoted hex string (e.g., "\x01\x02"). Otherwise, it's returned as is.
+func formatArgsForDisplay(args []string) string {
+	// Create a new slice to hold the formatted arguments.
+	formattedArgs := make([]string, len(args))
+
+	for i, arg := range args {
+		// An empty string has 0 printable characters, but should be displayed as is.
+		// We only want to format non-empty strings that are fully non-printable.
+		if len(arg) > 0 && printableCount([]byte(arg)) == 0 {
+			// This argument consists entirely of non-printable characters.
+			// Format it as a quoted hex string.
+			var hexBuilder strings.Builder
+			for _, b := range []byte(arg) {
+				// Format each byte as \xHH (e.g., \x0a, \x1f)
+				hexBuilder.WriteString(fmt.Sprintf("\\x%02x", b))
+			}
+			formattedArgs[i] = fmt.Sprintf("\"%s\"", hexBuilder.String())
+		} else {
+			// This argument is either printable or empty. Keep it as is.
+			formattedArgs[i] = arg
+		}
+		
+		if strings.Contains(formattedArgs[i], "\n") {
+			formattedArgs[i] = strings.ReplaceAll(formattedArgs[i], "\n", "\\n")
+			if !strings.HasPrefix(formattedArgs[i], "\"") {
+				formattedArgs[i] = fmt.Sprintf("\"%s\"", formattedArgs[i])
+			}
+		}
+	}
+
+	// Join the now-formatted arguments with spaces.
+	return strings.Join(formattedArgs, " ")
+}
+
 func printFormattedLog(msg *types.LogMessage) {
 	printMutex.Lock()
 	defer printMutex.Unlock()
@@ -102,7 +143,8 @@ func printFormattedLog(msg *types.LogMessage) {
 	headerColor.Println("------------------------------------------------------------------------------")
 
 	// Arguments
-	cmdColor.Printf("$ %s %s\n", msg.Command, strings.Join(msg.Args, " "))
+	displayArgs := formatArgsForDisplay(msg.Args)
+	cmdColor.Printf("$ %s %s\n", msg.Command, displayArgs)
 
 	// Stdin, Stdout, Stderr
 	printData(stdinColor, "STDIN", msg.StdinData)
