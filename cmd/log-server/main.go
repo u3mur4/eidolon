@@ -20,12 +20,13 @@ var printMutex = &sync.Mutex{}
 
 // Color definitions
 var (
-	headerColor = color.New(color.FgCyan, color.Bold)
-	cmdColor    = color.New(color.FgYellow)
-	stdinColor  = color.New(color.FgGreen)
-	stdoutColor = color.New(color.FgWhite)
-	stderrColor = color.New(color.FgRed)
-	hexColor    = color.New(color.Faint)
+	headerColor   = color.New(color.FgCyan, color.Bold)
+	cmdColor      = color.New(color.FgYellow)
+	stdinColor    = color.New(color.FgGreen)
+	stdoutColor   = color.New(color.FgWhite)
+	stderrColor   = color.New(color.FgRed)
+	hexColor      = color.New(color.Faint)
+	exitCodeColor = color.New(color.BgRed, color.FgYellow, color.Bold)
 )
 
 func main() {
@@ -132,8 +133,16 @@ func printFormattedLog(msg *types.LogMessage) {
 	printMutex.Lock()
 	defer printMutex.Unlock()
 
+	// Prepare exit code string with conditional coloring
+	var exitCodeStr string
+	if msg.ExitCode != 0 {
+		exitCodeStr = exitCodeColor.Sprintf("%d", msg.ExitCode)
+	} else {
+		exitCodeStr = fmt.Sprintf("%d", msg.ExitCode)
+	}
+
 	// Header
-	headerColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	headerColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %s |TIME: %s\n", msg.PID, msg.PPID, msg.Command, exitCodeStr, msg.Timestamp.Format("15:04:05.000"))
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)
