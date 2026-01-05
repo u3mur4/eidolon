@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"unicode"
@@ -17,6 +20,13 @@ import (
 
 // Global mutex to prevent interleaved printing from concurrent connections
 var printMutex = &sync.Mutex{}
+
+// Global state for interactive commands
+var (
+	searchText     string
+	onlyNonZero    bool
+	highlightColor = color.New(color.BgYellow, color.FgBlack)
+)
 
 // Color definitions
 var (
@@ -50,6 +60,36 @@ func main() {
 		}
 		// Handle each connection in a new goroutine
 		go handleConnection(conn)
+	}
+}
+
+func init() {
+	go handleInput()
+}
+
+func handleInput() {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "search:") {
+			printMutex.Lock()
+			searchText = strings.TrimSpace(strings.TrimPrefix(line, "search:"))
+			fmt.Printf("Search text set to: %q\n", searchText)
+			printMutex.Unlock()
+		} else if line == "clear" {
+			printMutex.Lock()
+			fmt.Print("\033[H\033[2J") // Clear terminal screen
+			printMutex.Unlock()
+		} else if line == "exit code" {
+			printMutex.Lock()
+			onlyNonZero = !onlyNonZero
+			fmt.Printf("Only non-zero exit codes: %v\n", onlyNonZero)
+			printMutex.Unlock()
+		} else if line != "" {
+			fmt.Printf("Unknown command: %s (Available: search: <text>, clear, exit code)\n", line)
+		}
 	}
 }
 
@@ -97,17 +137,52 @@ func printData(c *color.Color, title string, data []byte) {
 	}
 	c.Printf("%s (%d bytes)\n", title, len(data))
 	if isPrintable(data) {
-		for _, b := range data {
-			if b >= 32 && b < 127 || unicode.IsSpace(rune(b)) {
-				c.Print(string(b))
-			} else {
-				specialCharColor.Printf("\\x%02x", b)
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			// Process each character to escape non-printables
+			var processed bytes.Buffer
+			for _, b := range []byte(line) {
+				if b >= 32 && b < 127 || unicode.IsSpace(rune(b)) {
+					processed.WriteByte(b)
+				} else {
+					processed.WriteString(specialCharColor.Sprintf("\\x%02x", b))
+				}
+			}
+
+			output := processed.String()
+			if searchText != "" {
+				output = highlightSearch(output)
+			}
+			c.Print(output)
+
+			if i < len(lines)-1 {
+				fmt.Println()
 			}
 		}
 		fmt.Println()
 	} else {
 		hexColor.Println(hex.Dump(data))
 	}
+}
+
+func highlightSearch(text string) string {
+	if searchText == "" {
+		return text
+	}
+
+	parts := strings.Split(text, searchText)
+	if len(parts) == 1 {
+		return text
+	}
+
+	var result strings.Builder
+	for i, part := range parts {
+		result.WriteString(part)
+		if i < len(parts)-1 {
+			result.WriteString(highlightColor.Sprint(searchText))
+		}
+	}
+	return result.String()
 }
 
 // formatArgsForDisplay takes a slice of string arguments and formats them for display with colors.
@@ -160,6 +235,10 @@ func formatArgsForDisplay(args []string) string {
 }
 
 func printFormattedLog(msg *types.LogMessage) {
+	if onlyNonZero && msg.ExitCode == 0 {
+		return
+	}
+
 	printMutex.Lock()
 	defer printMutex.Unlock()
 
@@ -168,11 +247,24 @@ func printFormattedLog(msg *types.LogMessage) {
 	if msg.ExitCode != 0 {
 		hColor = exitCodeColor
 	}
-	hColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	if searchText != "" {
+		hColor.Print(highlightSearch(headerText))
+	} else {
+		hColor.Print(headerText)
+	}
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)
-	cmdColor.Printf("%s %s\n", msg.Command, displayArgs)
+	cmdText := fmt.Sprintf("%s %s\n", msg.Command, displayArgs)
+	if searchText != "" {
+		// Note: displayArgs already has internal colorization,
+		// but highlightSearch will add more colors on top if it matches.
+		// Color packages usually handle nested ANSI codes okay, but let's be careful.
+		fmt.Print(highlightSearch(cmdText))
+	} else {
+		cmdColor.Print(cmdText)
+	}
 
 	// Stdin, Stdout, Stderr
 	printData(stdinColor, "STDIN", msg.StdinData)
