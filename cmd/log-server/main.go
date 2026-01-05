@@ -27,6 +27,9 @@ var (
 	stderrColor   = color.New(color.FgRed)
 	hexColor      = color.New(color.Faint)
 	exitCodeColor = color.New(color.BgRed, color.FgYellow, color.Bold)
+	flagColor     = color.New(color.FgHiCyan)
+	flagValColor  = color.New(color.FgCyan)
+	argColor      = color.New(color.FgHiGreen)
 )
 
 func main() {
@@ -98,34 +101,42 @@ func printData(c *color.Color, title string, data []byte) {
 	}
 }
 
-// formatArgsForDisplay takes a slice of string arguments and formats them for display.
-// If an argument contains no printable characters (but is not empty), it is
-// converted to a quoted hex string (e.g., "\x01\x02"). Otherwise, it's returned as is.
+// formatArgsForDisplay takes a slice of string arguments and formats them for display with colors.
 func formatArgsForDisplay(args []string) string {
-	// Create a new slice to hold the formatted arguments.
 	formattedArgs := make([]string, len(args))
 
 	for i, arg := range args {
+		display := arg
 		// An empty string has 0 printable characters, but should be displayed as is.
 		// We only want to format non-empty strings that are fully non-printable.
 		if len(arg) > 0 && printableCount([]byte(arg)) == 0 {
-			// This argument consists entirely of non-printable characters.
-			// Format it as a quoted hex string.
 			var hexBuilder strings.Builder
 			for _, b := range []byte(arg) {
-				// Format each byte as \xHH (e.g., \x0a, \x1f)
 				hexBuilder.WriteString(fmt.Sprintf("\\x%02x", b))
 			}
-			formattedArgs[i] = fmt.Sprintf("\"%s\"", hexBuilder.String())
-		} else {
-			// This argument is either printable or empty. Keep it as is.
-			formattedArgs[i] = arg
+			display = fmt.Sprintf("\"%s\"", hexBuilder.String())
 		}
 
-		formattedArgs[i] = fmt.Sprintf("|%s|", formattedArgs[i])
+		// Apply coloring based on the argument structure
+		if strings.HasPrefix(arg, "-") {
+			if idx := strings.Index(arg, "="); idx != -1 {
+				// flag=value
+				flagPart := arg[:idx]
+				equalPart := "="
+				valPart := arg[idx+1:]
+				formattedArgs[i] = flagColor.Sprint(flagPart) +
+					stdoutColor.Sprint(equalPart) +
+					flagValColor.Sprint(valPart)
+			} else {
+				// simple flag
+				formattedArgs[i] = flagColor.Sprint(display)
+			}
+		} else {
+			// regular argument
+			formattedArgs[i] = argColor.Sprint(display)
+		}
 	}
 
-	// Join the now-formatted arguments with spaces.
 	return strings.Join(formattedArgs, " ")
 }
 
