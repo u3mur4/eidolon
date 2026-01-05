@@ -20,16 +20,17 @@ var printMutex = &sync.Mutex{}
 
 // Color definitions
 var (
-	headerColor   = color.New(color.FgCyan, color.Bold)
-	cmdColor      = color.New(color.FgYellow)
-	stdinColor    = color.New(color.FgGreen)
-	stdoutColor   = color.New(color.FgWhite)
-	stderrColor   = color.New(color.FgRed)
-	hexColor      = color.New(color.Faint)
-	exitCodeColor = color.New(color.BgRed, color.FgYellow, color.Bold)
-	flagColor     = color.New(color.FgHiCyan)
-	flagValColor  = color.New(color.FgCyan)
-	argColor      = color.New(color.FgHiGreen)
+	headerColor      = color.New(color.FgCyan, color.Bold)
+	cmdColor         = color.New(color.FgYellow)
+	stdinColor       = color.New(color.FgGreen)
+	stdoutColor      = color.New(color.FgWhite)
+	stderrColor      = color.New(color.FgRed)
+	hexColor         = color.New(color.Faint)
+	exitCodeColor    = color.New(color.BgRed, color.FgYellow, color.Bold)
+	flagColor        = color.New(color.FgHiCyan)
+	flagValColor     = color.New(color.FgCyan)
+	argColor         = color.New(color.FgHiGreen)
+	specialCharColor = color.New(color.FgHiMagenta, color.Bold)
 )
 
 func main() {
@@ -89,13 +90,21 @@ func isPrintable(data []byte) bool {
 }
 
 // printData prints data as a string or a hex dump based on its content.
+// Non-printable characters in "printable" data are escaped and colorized.
 func printData(c *color.Color, title string, data []byte) {
 	if len(data) == 0 {
 		return
 	}
 	c.Printf("%s (%d bytes)\n", title, len(data))
 	if isPrintable(data) {
-		c.Println(string(data))
+		for _, b := range data {
+			if b >= 32 && b < 127 || unicode.IsSpace(rune(b)) {
+				c.Print(string(b))
+			} else {
+				specialCharColor.Printf("\\x%02x", b)
+			}
+		}
+		fmt.Println()
 	} else {
 		hexColor.Println(hex.Dump(data))
 	}
