@@ -113,6 +113,7 @@ func printData(c *color.Color, title string, data []byte) {
 // formatArgsForDisplay takes a slice of string arguments and formats them for display with colors.
 func formatArgsForDisplay(args []string) string {
 	formattedArgs := make([]string, len(args))
+	prevWasFlag := false
 
 	for i, arg := range args {
 		display := arg
@@ -126,7 +127,7 @@ func formatArgsForDisplay(args []string) string {
 			display = fmt.Sprintf("\"%s\"", hexBuilder.String())
 		}
 
-		// Apply coloring based on the argument structure
+		// Apply coloring based on the argument structure and context
 		if strings.HasPrefix(arg, "-") {
 			if idx := strings.Index(arg, "="); idx != -1 {
 				// flag=value
@@ -136,13 +137,22 @@ func formatArgsForDisplay(args []string) string {
 				formattedArgs[i] = flagColor.Sprint(flagPart) +
 					stdoutColor.Sprint(equalPart) +
 					flagValColor.Sprint(valPart)
+				prevWasFlag = false // It's self-contained
 			} else {
 				// simple flag
 				formattedArgs[i] = flagColor.Sprint(display)
+				prevWasFlag = true
 			}
 		} else {
-			// regular argument
-			formattedArgs[i] = argColor.Sprint(display)
+			// not a flag
+			if prevWasFlag {
+				// likely a value for the previous flag
+				formattedArgs[i] = argColor.Sprint(display)
+			} else {
+				// positional argument or subcommand
+				formattedArgs[i] = cmdColor.Sprint(display)
+			}
+			prevWasFlag = false
 		}
 	}
 
