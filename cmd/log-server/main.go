@@ -133,16 +133,12 @@ func printFormattedLog(msg *types.LogMessage) {
 	printMutex.Lock()
 	defer printMutex.Unlock()
 
-	// Prepare exit code string with conditional coloring
-	var exitCodeStr string
-	if msg.ExitCode != 0 {
-		exitCodeStr = exitCodeColor.Sprintf("%d", msg.ExitCode)
-	} else {
-		exitCodeStr = fmt.Sprintf("%d", msg.ExitCode)
-	}
-
 	// Header
-	headerColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %s |TIME: %s\n", msg.PID, msg.PPID, msg.Command, exitCodeStr, msg.Timestamp.Format("15:04:05.000"))
+	hColor := headerColor
+	if msg.ExitCode != 0 {
+		hColor = exitCodeColor
+	}
+	hColor.Printf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)
