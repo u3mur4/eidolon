@@ -20,9 +20,26 @@ import (
 const realGitPath = "/bin/git"
 const logServerAddr = "127.0.0.1:9999" // Assuming server runs on the same machine
 
+type SafeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *SafeBuffer) Write(p []byte) (n int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *SafeBuffer) Bytes() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]byte(nil), s.buf.Bytes()...)
+}
+
 func main() {
 	// The buffered data
-	var stdinBuf, stdoutBuf, stderrBuf bytes.Buffer
+	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
 
 	// Get command name and arguments
 	cmdName := filepath.Base(os.Args[0])
@@ -32,9 +49,21 @@ func main() {
 	cmd := exec.Command(realGitPath, args...)
 
 	// Create pipes for I/O
-	stdinPipe, _ := cmd.StdinPipe()
-	stdoutPipe, _ := cmd.StdoutPipe()
-	stderrPipe, _ := cmd.StderrPipe()
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		log.Printf("git-proxy: Failed to create stdin pipe: %v", err)
+		os.Exit(1)
+	}
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Printf("git-proxy: Failed to create stdout pipe: %v", err)
+		os.Exit(1)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		log.Printf("git-proxy: Failed to create stderr pipe: %v", err)
+		os.Exit(1)
+	}
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
@@ -71,7 +100,7 @@ func main() {
 	wg.Wait()
 
 	// Wait for the command to exit and capture its status
-	err := cmd.Wait()
+	err = cmd.Wait()
 	exitCode := 0
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
