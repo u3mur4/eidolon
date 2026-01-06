@@ -139,17 +139,7 @@ func printData(c *color.Color, title string, data []byte) {
 	if isPrintable(data) {
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
-			// Process each character to escape non-printables
-			var processed bytes.Buffer
-			for _, b := range []byte(line) {
-				if b >= 32 && b < 127 || unicode.IsSpace(rune(b)) {
-					processed.WriteByte(b)
-				} else {
-					processed.WriteString(specialCharColor.Sprintf("\\x%02x", b))
-				}
-			}
-
-			output := processed.String()
+			output := escapeBytes([]byte(line))
 			if searchText != "" {
 				output = highlightSearch(output)
 			}
@@ -163,6 +153,19 @@ func printData(c *color.Color, title string, data []byte) {
 	} else {
 		hexColor.Println(hex.Dump(data))
 	}
+}
+
+// escapeBytes returns a string where non-printable characters are escaped and colorized.
+func escapeBytes(data []byte) string {
+	var processed bytes.Buffer
+	for _, b := range data {
+		if b >= 32 && b < 127 || unicode.IsSpace(rune(b)) {
+			processed.WriteByte(b)
+		} else {
+			processed.WriteString(specialCharColor.Sprintf("\\x%02x", b))
+		}
+	}
+	return processed.String()
 }
 
 func highlightSearch(text string) string {
@@ -191,17 +194,6 @@ func formatArgsForDisplay(args []string) string {
 	prevWasFlag := false
 
 	for i, arg := range args {
-		display := arg
-		// An empty string has 0 printable characters, but should be displayed as is.
-		// We only want to format non-empty strings that are fully non-printable.
-		if len(arg) > 0 && printableCount([]byte(arg)) == 0 {
-			var hexBuilder strings.Builder
-			for _, b := range []byte(arg) {
-				hexBuilder.WriteString(fmt.Sprintf("\\x%02x", b))
-			}
-			display = fmt.Sprintf("\"%s\"", hexBuilder.String())
-		}
-
 		// Apply coloring based on the argument structure and context
 		if strings.HasPrefix(arg, "-") {
 			if idx := strings.Index(arg, "="); idx != -1 {
@@ -209,17 +201,18 @@ func formatArgsForDisplay(args []string) string {
 				flagPart := arg[:idx]
 				equalPart := "="
 				valPart := arg[idx+1:]
-				formattedArgs[i] = flagColor.Sprint(flagPart) +
+				formattedArgs[i] = flagColor.Sprint(escapeBytes([]byte(flagPart))) +
 					stdoutColor.Sprint(equalPart) +
-					flagValColor.Sprint(valPart)
+					flagValColor.Sprint(escapeBytes([]byte(valPart)))
 				prevWasFlag = false // It's self-contained
 			} else {
 				// simple flag
-				formattedArgs[i] = flagColor.Sprint(display)
+				formattedArgs[i] = flagColor.Sprint(escapeBytes([]byte(arg)))
 				prevWasFlag = true
 			}
 		} else {
 			// not a flag
+			display := escapeBytes([]byte(arg))
 			if prevWasFlag {
 				// likely a value for the previous flag
 				formattedArgs[i] = argColor.Sprint(display)
