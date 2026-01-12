@@ -14,7 +14,7 @@ import (
 	"sync"
 	"unicode"
 
-	"gitea.morix.site/u3mur4/git-proxy/pkg/common/types"
+	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
 	"github.com/fatih/color"
 )
 

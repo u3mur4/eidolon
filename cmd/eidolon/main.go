@@ -13,12 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"gitea.morix.site/u3mur4/git-proxy/pkg/common/types"
+	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
 )
-
-// Configuration
-const realGitPath = "/bin/git"
-const logServerAddr = "127.0.0.1:9999" // Assuming server runs on the same machine
 
 type SafeBuffer struct {
 	mu  sync.Mutex
@@ -38,36 +34,49 @@ func (s *SafeBuffer) Bytes() []byte {
 }
 
 func main() {
-	// The buffered data
-	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
-
-	// Get command name and arguments
-	cmdName := filepath.Base(os.Args[0])
+	// 1. Get command name and arguments
+	executableName := filepath.Base(os.Args[0])
 	args := os.Args[1:]
 
-	// Set up the real git command
-	cmd := exec.Command(realGitPath, args...)
+	// 2. Load configuration
+	config := loadConfig(executableName)
+
+	// 3. Resolve the real binary to execute
+	realPath, err := resolveBinary(executableName, config)
+	if err != nil {
+		log.Fatalf("eidolon: %v", err)
+	}
+
+	// 4. Set up the real command
+	cmd := exec.Command(realPath, args...)
+	cmd.Env = os.Environ()
+	for k, v := range config.Env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+
+	// The buffered data
+	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
 
 	// Create pipes for I/O
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
-		log.Printf("git-proxy: Failed to create stdin pipe: %v", err)
+		log.Printf("eidolon: Failed to create stdin pipe: %v", err)
 		os.Exit(1)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Printf("git-proxy: Failed to create stdout pipe: %v", err)
+		log.Printf("eidolon: Failed to create stdout pipe: %v", err)
 		os.Exit(1)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		log.Printf("git-proxy: Failed to create stderr pipe: %v", err)
+		log.Printf("eidolon: Failed to create stderr pipe: %v", err)
 		os.Exit(1)
 	}
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		log.Printf("git-proxy: Failed to start real git command: %v", err)
+		log.Printf("eidolon: Failed to start real command %q: %v", realPath, err)
 		os.Exit(127)
 	}
 
@@ -117,7 +126,7 @@ func main() {
 		Timestamp:  time.Now(),
 		PID:        os.Getpid(),
 		PPID:       os.Getppid(),
-		Command:    cmdName,
+		Command:    executableName,
 		Args:       args,
 		ExitCode:   exitCode,
 		StdinData:  stdinBuf.Bytes(),
@@ -126,22 +135,22 @@ func main() {
 	}
 
 	// Send the message to the log server
-	sendToServer(msg)
+	sendToServer(config.Server, msg)
 
-	// Finally, exit with the same code as the real git command
+	// Finally, exit with the same code as the real command
 	os.Exit(exitCode)
 }
 
-func sendToServer(msg types.LogMessage) {
-	conn, err := net.DialTimeout("tcp", logServerAddr, 2*time.Second)
+func sendToServer(addr string, msg types.LogMessage) {
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
-		log.Printf("git-proxy: Failed to connect to log server: %v", err)
+		log.Printf("eidolon: Failed to connect to log server at %s: %v", addr, err)
 		return
 	}
 	defer conn.Close()
 
 	encoder := gob.NewEncoder(conn)
 	if err := encoder.Encode(&msg); err != nil {
-		log.Printf("git-proxy: Failed to send log message: %v", err)
+		log.Printf("eidolon: Failed to send log message: %v", err)
 	}
 }
