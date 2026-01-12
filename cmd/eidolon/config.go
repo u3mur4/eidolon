@@ -95,44 +95,57 @@ func loadConfig() (Config, error) {
 }
 
 func (c *Config) ResolveCommand(cmdName string, args []string) (string, []string, error) {
-	// 1. Resolve Binary
-	binPath := ""
+	binPath, err := c.resolveBinaryPath(cmdName)
+	if err != nil {
+		return "", nil, err
+	}
+
+	newArgs := c.applyFlagReplacements(cmdName, args)
+	return binPath, newArgs, nil
+}
+
+func (c *Config) resolveBinaryPath(cmdName string) (string, error) {
+	// 1. Global binary override
 	if c.Global.Binary != "" {
-		binPath = c.Global.Binary
-	} else if cmdCfg, ok := c.Commands[cmdName]; ok && cmdCfg.Binary != "" {
-		binPath = cmdCfg.Binary
-	} else {
-		// Find real binary in PATH (excluding self)
-		selfPath, err := os.Executable()
-		if err != nil {
-			return "", nil, err
-		}
-		selfDir := filepath.Dir(selfPath)
+		return c.Global.Binary, nil
+	}
 
-		pathEnv := os.Getenv("PATH")
-		found := false
-		for _, p := range filepath.SplitList(pathEnv) {
-			if filepath.Clean(p) == filepath.Clean(selfDir) {
-				continue
-			}
+	// 2. Command-specific binary override
+	if cmdCfg, ok := c.Commands[cmdName]; ok && cmdCfg.Binary != "" {
+		return cmdCfg.Binary, nil
+	}
 
-			fullPath := filepath.Join(p, cmdName)
-			info, err := os.Stat(fullPath)
-			if err == nil && !info.IsDir() && (info.Mode()&0111 != 0) {
-				binPath = fullPath
-				found = true
-				break
-			}
+	// 3. Find real binary in PATH (excluding self)
+	selfPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	selfDir := filepath.Dir(selfPath)
+
+	pathEnv := os.Getenv("PATH")
+	for _, p := range filepath.SplitList(pathEnv) {
+		if filepath.Clean(p) == filepath.Clean(selfDir) {
+			continue
 		}
-		if !found {
-			return "", nil, fmt.Errorf("binary %q not found in PATH (excluding %s)", cmdName, selfDir)
+
+		fullPath := filepath.Join(p, cmdName)
+		info, err := os.Stat(fullPath)
+		if err == nil && !info.IsDir() && (info.Mode()&0111 != 0) {
+			return fullPath, nil
 		}
 	}
 
-	// 2. Resolve Flags (Replacement)
+	return "", fmt.Errorf("binary %q not found in PATH (excluding %s)", cmdName, selfDir)
+}
+
+func (c *Config) applyFlagReplacements(cmdName string, args []string) []string {
 	replacements := append([]FlagReplacement{}, c.Global.Flags...)
 	if cmdCfg, ok := c.Commands[cmdName]; ok {
 		replacements = append(replacements, cmdCfg.Flags...)
+	}
+
+	if len(replacements) == 0 {
+		return args
 	}
 
 	newArgs := []string{}
@@ -161,7 +174,7 @@ func (c *Config) ResolveCommand(cmdName string, args []string) (string, []string
 		}
 	}
 
-	return binPath, newArgs, nil
+	return newArgs
 }
 
 func (c *Config) GetEnv(cmdName string) []string {
