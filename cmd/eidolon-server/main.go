@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"unicode"
@@ -253,7 +254,11 @@ func printFormattedLog(msg *types.LogMessage) {
 	if msg.ExitCode != 0 {
 		hColor = exitCodeColor
 	}
-	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, msg.Command, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	cmdName := msg.Alias
+	if msg.Path != "" && msg.Alias != filepath.Base(msg.Path) {
+		cmdName = fmt.Sprintf("%s -> %s", msg.Alias, msg.Path)
+	}
+	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n", msg.PID, msg.PPID, cmdName, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
 	if searchText != "" {
 		hColor.Print(highlightSearch(headerText))
 	} else {
@@ -262,7 +267,11 @@ func printFormattedLog(msg *types.LogMessage) {
 
 	// Arguments
 	displayArgs := formatArgsForDisplay(msg.Args)
-	cmdText := fmt.Sprintf("%s %s\n", msg.Command, displayArgs)
+	cmdToDisplay := msg.Alias
+	if msg.Path != "" && msg.Alias != filepath.Base(msg.Path) {
+		cmdToDisplay = msg.Path
+	}
+	cmdText := fmt.Sprintf("%s %s\n", cmdToDisplay, displayArgs)
 	if searchText != "" {
 		// Note: displayArgs already has internal colorization,
 		// but highlightSearch will add more colors on top if it matches.

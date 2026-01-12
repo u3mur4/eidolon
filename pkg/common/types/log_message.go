@@ -6,8 +6,9 @@ import "time"
 type LogMessage struct {
 	Timestamp  time.Time
 	PID        int
-	PPID        int
-	Command    string
+	PPID       int
+	Alias      string
+	Path       string
 	Args       []string
 	ExitCode   int
 	StdinData  []byte
