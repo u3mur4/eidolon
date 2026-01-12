@@ -41,15 +41,12 @@ func main() {
 	// 2. Load configuration
 	config, _ := loadConfig()
 
-	// 3. Resolve the real binary and transform flags
-	realPath, newArgs, err := config.ResolveCommand(executableName, args)
+	// 3. Set up the real command using the context
+	context := &CommandContext{Config: config, CmdName: executableName, Args: args}
+	cmd, err := context.Command()
 	if err != nil {
 		log.Fatalf("eidolon: %v", err)
 	}
-
-	// 4. Set up the real command
-	cmd := exec.Command(realPath, newArgs...)
-	cmd.Env = config.GetEnv(executableName)
 
 	// The buffered data
 	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
@@ -73,7 +70,7 @@ func main() {
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		log.Printf("eidolon: Failed to start real command %q: %v", realPath, err)
+		log.Printf("eidolon: Failed to start real command %q: %v", cmd.Path, err)
 		os.Exit(127)
 	}
 
