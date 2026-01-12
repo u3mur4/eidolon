@@ -41,14 +41,14 @@ func main() {
 	// 2. Load configuration
 	config, _ := loadConfig()
 
-	// 3. Resolve the real binary to execute
-	realPath, err := config.ResolveBinary(executableName)
+	// 3. Resolve the real binary and transform flags
+	realPath, newArgs, err := config.ResolveCommand(executableName, args)
 	if err != nil {
 		log.Fatalf("eidolon: %v", err)
 	}
 
 	// 4. Set up the real command
-	cmd := exec.Command(realPath, args...)
+	cmd := exec.Command(realPath, newArgs...)
 	cmd.Env = config.GetEnv(executableName)
 
 	// The buffered data

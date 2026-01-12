@@ -7,9 +7,15 @@ import (
 	"path/filepath"
 )
 
+type FlagReplacement struct {
+	From []string `json:"from"`
+	To   []string `json:"to"`
+}
+
 type CommandConfig struct {
 	Binary string            `json:"binary"`
 	Env    map[string]string `json:"env"`
+	Flags  []FlagReplacement `json:"flags"`
 }
 
 type Config struct {
@@ -39,6 +45,10 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			}
 		case "env":
 			if err := json.Unmarshal(v, &c.Global.Env); err != nil {
+				return err
+			}
+		case "flags":
+			if err := json.Unmarshal(v, &c.Global.Flags); err != nil {
 				return err
 			}
 		default:
@@ -84,38 +94,74 @@ func loadConfig() (Config, error) {
 	return config, nil
 }
 
-func (c *Config) ResolveBinary(cmdName string) (string, error) {
-	// 1. Global binary override
+func (c *Config) ResolveCommand(cmdName string, args []string) (string, []string, error) {
+	// 1. Resolve Binary
+	binPath := ""
 	if c.Global.Binary != "" {
-		return c.Global.Binary, nil
-	}
-
-	// 2. Command-specific binary override
-	if cmdCfg, ok := c.Commands[cmdName]; ok && cmdCfg.Binary != "" {
-		return cmdCfg.Binary, nil
-	}
-
-	// 3. Find real binary in PATH (excluding self)
-	selfPath, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	selfDir := filepath.Dir(selfPath)
-
-	pathEnv := os.Getenv("PATH")
-	for _, p := range filepath.SplitList(pathEnv) {
-		if filepath.Clean(p) == filepath.Clean(selfDir) {
-			continue
+		binPath = c.Global.Binary
+	} else if cmdCfg, ok := c.Commands[cmdName]; ok && cmdCfg.Binary != "" {
+		binPath = cmdCfg.Binary
+	} else {
+		// Find real binary in PATH (excluding self)
+		selfPath, err := os.Executable()
+		if err != nil {
+			return "", nil, err
 		}
+		selfDir := filepath.Dir(selfPath)
 
-		fullPath := filepath.Join(p, cmdName)
-		info, err := os.Stat(fullPath)
-		if err == nil && !info.IsDir() && (info.Mode()&0111 != 0) {
-			return fullPath, nil
+		pathEnv := os.Getenv("PATH")
+		found := false
+		for _, p := range filepath.SplitList(pathEnv) {
+			if filepath.Clean(p) == filepath.Clean(selfDir) {
+				continue
+			}
+
+			fullPath := filepath.Join(p, cmdName)
+			info, err := os.Stat(fullPath)
+			if err == nil && !info.IsDir() && (info.Mode()&0111 != 0) {
+				binPath = fullPath
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", nil, fmt.Errorf("binary %q not found in PATH (excluding %s)", cmdName, selfDir)
 		}
 	}
 
-	return "", fmt.Errorf("binary %q not found in PATH (excluding %s)", cmdName, selfDir)
+	// 2. Resolve Flags (Replacement)
+	replacements := append([]FlagReplacement{}, c.Global.Flags...)
+	if cmdCfg, ok := c.Commands[cmdName]; ok {
+		replacements = append(replacements, cmdCfg.Flags...)
+	}
+
+	newArgs := []string{}
+	for i := 0; i < len(args); {
+		matched := false
+		for _, r := range replacements {
+			if len(r.From) > 0 && i+len(r.From) <= len(args) {
+				match := true
+				for j := 0; j < len(r.From); j++ {
+					if args[i+j] != r.From[j] {
+						match = false
+						break
+					}
+				}
+				if match {
+					newArgs = append(newArgs, r.To...)
+					i += len(r.From)
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			newArgs = append(newArgs, args[i])
+			i++
+		}
+	}
+
+	return binPath, newArgs, nil
 }
 
 func (c *Config) GetEnv(cmdName string) []string {
