@@ -51,7 +51,7 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 	defer listener.Close()
-	log.Printf("Log server listening on %s", addr)
+	log.Printf("Eidolon server listening on %s", addr)
 
 	for {
 		conn, err := listener.Accept()

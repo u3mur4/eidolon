@@ -1,45 +1,49 @@
-# Makefile for the git-proxy project
+# Makefile for the eidolon project
 
 # --- Variables ---
-
-# Output directory for binaries
-GOBIN := $(CURDIR)/bin
 
 # Go commands
 GO := go
 GOBUILD := $(GO) build
 GOCLEAN := $(GO) clean
+INSTALL := install
 
 # Target binaries
-GOPROXY_BIN := $(GOBIN)/git-proxy
-LOGSERVER_BIN := $(GOBIN)/log-server
+EIDOLON_BIN := eidolon
+EIDOLON_SERVER_BIN := eidolon-server
 
-# List of symlinks to create for the git-proxy
-GIT_SYMLINKS := git git-upload-pack git-receive-pack git-cat-file git-for-each-ref git-rev-parse git-log git-lfs
+# Installation paths
+PREFIX ?= /usr/local
+BINDIR := $(PREFIX)/bin
 
 # --- Build Targets ---
 
 # The default target, executed when you just run `make`
-all: $(GOPROXY_BIN) $(LOGSERVER_BIN) symlinks
+all: $(EIDOLON_BIN) $(EIDOLON_SERVER_BIN)
 
-# Build the git-proxy binary
-$(GOPROXY_BIN):
-	@echo "==> Building git-proxy..."
-	@mkdir -p $(GOBIN)
-	$(GOBUILD) -o $@ ./cmd/git-proxy
+# Build the eidolon binary
+$(EIDOLON_BIN):
+	@echo "==> Building eidolon..."
+	$(GOBUILD) -o $@ ./cmd/eidolon
 
-# Build the log-server binary
-$(LOGSERVER_BIN):
-	@echo "==> Building log-server..."
-	@mkdir -p $(GOBIN)
-	$(GOBUILD) -o $@ ./cmd/log-server
+# Build the eidolon-server binary
+$(EIDOLON_SERVER_BIN):
+	@echo "==> Building eidolon-server..."
+	$(GOBUILD) -o $@ ./cmd/eidolon-server
 
-# Create symlinks for common git commands
-symlinks: $(GOPROXY_BIN)
-	@echo "==> Creating git symlinks in $(GOBIN)..."
-	@# Loop over the list of symlinks and create them inside the bin directory.
-	@# The symlinks are relative, pointing to 'git-proxy' within the same directory.
-	$(foreach link, $(GIT_SYMLINKS), ln -sf git-proxy $(GOBIN)/$(link);)
+# --- Installation ---
+
+install: all
+	@echo "==> Installing to $(BINDIR)..."
+	@$(INSTALL) -d $(BINDIR)
+	@$(INSTALL) -m 0755 $(EIDOLON_BIN) $(BINDIR)/$(EIDOLON_BIN)
+	@$(INSTALL) -m 0755 $(EIDOLON_SERVER_BIN) $(BINDIR)/$(EIDOLON_SERVER_BIN)
+	@echo "    Done."
+
+uninstall:
+	@echo "==> Uninstalling from $(BINDIR)..."
+	@rm -f $(BINDIR)/$(EIDOLON_BIN)
+	@rm -f $(BINDIR)/$(EIDOLON_SERVER_BIN)
 	@echo "    Done."
 
 # --- Housekeeping ---
@@ -47,10 +51,10 @@ symlinks: $(GOPROXY_BIN)
 # Clean up build artifacts
 clean:
 	@echo "==> Cleaning up..."
-	@rm -rf $(GOBIN)
+	@rm -f $(EIDOLON_BIN) $(EIDOLON_SERVER_BIN)
 	$(GOCLEAN)
 	@echo "    Done."
 
 # Phony targets are not files. This prevents `make` from getting confused if
 # a file named 'all' or 'clean' exists.
-.PHONY: all clean symlinks
+.PHONY: all clean install uninstall
