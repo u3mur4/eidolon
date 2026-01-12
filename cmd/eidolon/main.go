@@ -39,20 +39,17 @@ func main() {
 	args := os.Args[1:]
 
 	// 2. Load configuration
-	config := loadConfig(executableName)
+	config, _ := loadConfig()
 
 	// 3. Resolve the real binary to execute
-	realPath, err := resolveBinary(executableName, config)
+	realPath, err := config.ResolveBinary(executableName)
 	if err != nil {
 		log.Fatalf("eidolon: %v", err)
 	}
 
 	// 4. Set up the real command
 	cmd := exec.Command(realPath, args...)
-	cmd.Env = os.Environ()
-	for k, v := range config.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = config.GetEnv(executableName)
 
 	// The buffered data
 	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
