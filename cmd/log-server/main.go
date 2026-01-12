@@ -24,6 +24,7 @@ var printMutex = &sync.Mutex{}
 // Global state for interactive commands
 var (
 	searchText     string
+	filterText     string
 	onlyNonZero    bool
 	highlightColor = color.New(color.BgYellow, color.FgBlack)
 )
@@ -78,6 +79,11 @@ func handleInput() {
 			searchText = strings.TrimSpace(strings.TrimPrefix(line, "search:"))
 			fmt.Printf("Search text set to: %q\n", searchText)
 			printMutex.Unlock()
+		} else if strings.HasPrefix(line, "filter:") {
+			printMutex.Lock()
+			filterText = strings.TrimSpace(strings.TrimPrefix(line, "filter:"))
+			fmt.Printf("Filter text set to: %q (commands containing this in stdin/out/err will be skipped)\n", filterText)
+			printMutex.Unlock()
 		} else if line == "clear" {
 			printMutex.Lock()
 			fmt.Print("\033[H\033[2J") // Clear terminal screen
@@ -88,7 +94,7 @@ func handleInput() {
 			fmt.Printf("Only non-zero exit codes: %v\n", onlyNonZero)
 			printMutex.Unlock()
 		} else if line != "" {
-			fmt.Printf("Unknown command: %s (Available: search: <text>, clear, exit code)\n", line)
+			fmt.Printf("Unknown command: %s (Available: search: <text>, filter: <text>, clear, exit code)\n", line)
 		}
 	}
 }
@@ -230,6 +236,13 @@ func formatArgsForDisplay(args []string) string {
 func printFormattedLog(msg *types.LogMessage) {
 	if onlyNonZero && msg.ExitCode == 0 {
 		return
+	}
+	if filterText != "" {
+		if bytes.Contains(msg.StdinData, []byte(filterText)) ||
+			bytes.Contains(msg.StdoutData, []byte(filterText)) ||
+			bytes.Contains(msg.StderrData, []byte(filterText)) {
+			return
+		}
 	}
 
 	printMutex.Lock()
