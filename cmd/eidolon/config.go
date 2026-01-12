@@ -20,45 +20,8 @@ type CommandConfig struct {
 
 type Config struct {
 	Server   string                   `json:"server"`
-	Global   CommandConfig            `json:"-"`
-	Commands map[string]CommandConfig `json:"-"`
-}
-
-func (c *Config) UnmarshalJSON(data []byte) error {
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(data, &all); err != nil {
-		return err
-	}
-
-	c.Commands = make(map[string]CommandConfig)
-	c.Global.Env = make(map[string]string)
-
-	for k, v := range all {
-		switch k {
-		case "server":
-			if err := json.Unmarshal(v, &c.Server); err != nil {
-				return err
-			}
-		case "binary":
-			if err := json.Unmarshal(v, &c.Global.Binary); err != nil {
-				return err
-			}
-		case "env":
-			if err := json.Unmarshal(v, &c.Global.Env); err != nil {
-				return err
-			}
-		case "flags":
-			if err := json.Unmarshal(v, &c.Global.Flags); err != nil {
-				return err
-			}
-		default:
-			var cmdCfg CommandConfig
-			if err := json.Unmarshal(v, &cmdCfg); err == nil {
-				c.Commands[k] = cmdCfg
-			}
-		}
-	}
-	return nil
+	Global   CommandConfig            `json:"global"`
+	Commands map[string]CommandConfig `json:"commands"`
 }
 
 func loadConfig() (Config, error) {
