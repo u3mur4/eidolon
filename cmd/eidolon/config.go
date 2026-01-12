@@ -55,3 +55,68 @@ func loadConfig() (Config, error) {
 
 	return config, nil
 }
+
+func (c *Config) GetBinary(cmdName string) string {
+	if c.Global.Binary != "" {
+		return c.Global.Binary
+	}
+	if cmdCfg, ok := c.Commands[cmdName]; ok && cmdCfg.Binary != "" {
+		return cmdCfg.Binary
+	}
+	return ""
+}
+
+func (c *Config) GetEnv(cmdName string) map[string]string {
+	res := make(map[string]string)
+
+	for k, v := range c.Global.Env {
+		res[k] = v
+	}
+
+	if cmdCfg, ok := c.Commands[cmdName]; ok {
+		for k, v := range cmdCfg.Env {
+			res[k] = v
+		}
+	}
+
+	return res
+}
+
+func (c *Config) ApplyFlags(cmdName string, args []string) []string {
+	replacements := append([]FlagReplacement{}, c.Global.Flags...)
+	if cmdCfg, ok := c.Commands[cmdName]; ok {
+		replacements = append(replacements, cmdCfg.Flags...)
+	}
+
+	if len(replacements) == 0 {
+		return args
+	}
+
+	newArgs := []string{}
+	for i := 0; i < len(args); {
+		matched := false
+		for _, repl := range replacements {
+			if len(repl.From) > 0 && i+len(repl.From) <= len(args) {
+				match := true
+				for j := 0; j < len(repl.From); j++ {
+					if args[i+j] != repl.From[j] {
+						match = false
+						break
+					}
+				}
+				if match {
+					newArgs = append(newArgs, repl.To...)
+					i += len(repl.From)
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			newArgs = append(newArgs, args[i])
+			i++
+		}
+	}
+
+	return newArgs
+}

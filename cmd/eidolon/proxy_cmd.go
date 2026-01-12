@@ -33,8 +33,9 @@ func (s *SafeBuffer) Bytes() []byte {
 }
 
 type ProxyCmd struct {
-	Config  Config
-	Context *CommandContext
+	ServerAddr string
+	Context    *CommandContext
+	CmdName    string // Original name for logging
 }
 
 func (p *ProxyCmd) Run() int {
@@ -116,7 +117,7 @@ func (p *ProxyCmd) Run() int {
 		Timestamp:  time.Now(),
 		PID:        os.Getpid(),
 		PPID:       os.Getppid(),
-		Command:    p.Context.CmdName,
+		Command:    p.CmdName,
 		Args:       p.Context.Args,
 		ExitCode:   exitCode,
 		StdinData:  stdinBuf.Bytes(),
@@ -125,7 +126,7 @@ func (p *ProxyCmd) Run() int {
 	}
 
 	// Send the message to the log server
-	p.sendToServer(p.Config.Server, msg)
+	p.sendToServer(p.ServerAddr, msg)
 
 	return exitCode
 }

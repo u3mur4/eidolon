@@ -13,12 +13,27 @@ func main() {
 	// 2. Load configuration
 	config, _ := loadConfig()
 
-	// 3. Run the proxy command
-	context := &CommandContext{Config: config, CmdName: executableName, Args: args}
-	proxy := &ProxyCmd{Config: config, Context: context}
+	// 3. Create context and apply overrides from config
+	context := NewCommandContext(executableName, args)
+
+	// Apply binary override
+	context.OverrideCmd(config.GetBinary(executableName))
+
+	// Apply environment overrides
+	context.AddEnv(config.GetEnv(executableName))
+
+	// Apply flag replacements
+	context.OverrideArgs(config.ApplyFlags(executableName, args))
+
+	// 4. Run the proxy command
+	proxy := &ProxyCmd{
+		ServerAddr: config.Server,
+		Context:    context,
+		CmdName:    executableName,
+	}
 
 	exitStatus := proxy.Run()
 
-	// 4. Finally, exit with the same code as the real command
+	// 5. Finally, exit with the same code as the real command
 	os.Exit(exitStatus)
 }
