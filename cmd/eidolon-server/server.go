@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
+	"github.com/u3mur4/eidolon/pkg/common/types"
 )
 
 // Server coordinates all components of the eidolon log server

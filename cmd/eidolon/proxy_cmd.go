@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
+	"github.com/u3mur4/eidolon/pkg/common/types"
 )
 
 type SafeBuffer struct {

@@ -6,7 +6,7 @@ import (
 	"log"
 	"net"
 
-	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
+	"github.com/u3mur4/eidolon/pkg/common/types"
 )
 
 // MessageHandler is called for each decoded log message

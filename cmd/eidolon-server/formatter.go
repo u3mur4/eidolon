@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"gitea.morix.site/u3mur4/eidolon/pkg/common/types"
 	"github.com/fatih/color"
+	"github.com/u3mur4/eidolon/pkg/common/types"
 )
 
 // LogFormatter handles all output formatting for log messages
