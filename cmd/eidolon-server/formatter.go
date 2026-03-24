@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/fatih/color"
@@ -50,8 +51,16 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 		statusText = fmt.Sprintf("exit(%d)", msg.ExitCode)
 	}
 
-	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |STATUS: %s |TIME: %s\n",
-		msg.PID, msg.PPID, cmdName, statusText, msg.Timestamp.Format("15:04:05.000"))
+	startTime := msg.StartTime.Format("15:04:05.000")
+	var elapsed string
+	if msg.ExitTime.IsZero() {
+		elapsed = f.formatDuration(time.Since(msg.StartTime))
+	} else {
+		elapsed = f.formatDuration(msg.ExitTime.Sub(msg.StartTime))
+	}
+
+	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |STATUS: %s |START: %s |ELAPSED: %s\n",
+		msg.PID, msg.PPID, cmdName, statusText, startTime, elapsed)
 
 	if f.SearchText != "" {
 		headerText = f.highlightSearch(headerText)
@@ -240,4 +249,22 @@ func (f *LogFormatter) isPrintable(data []byte) bool {
 		}
 	}
 	return float64(printable)/float64(len(data)) > 0.9
+}
+
+func (f *LogFormatter) formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	} else if d < 60*time.Second {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	} else {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		if mins > 0 && secs > 0 {
+			return fmt.Sprintf("%dm%ds", mins, secs)
+		} else if mins > 0 {
+			return fmt.Sprintf("%dm", mins)
+		} else {
+			return fmt.Sprintf("%ds", secs)
+		}
+	}
 }

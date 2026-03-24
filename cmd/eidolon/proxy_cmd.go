@@ -37,6 +37,7 @@ type ProxyCmd struct {
 	Context    *CommandContext
 	CmdName    string // Original name for logging
 	Cmd        *exec.Cmd
+	StartTime  time.Time
 }
 
 func (p *ProxyCmd) Run() int {
@@ -68,6 +69,9 @@ func (p *ProxyCmd) Run() int {
 	}
 
 	// Start the command
+	startTime := time.Now()
+	p.StartTime = startTime
+
 	if err := cmd.Start(); err != nil {
 		log.Printf("eidolon: Failed to start real command %q: %v", cmd.Path, err)
 		return 127
@@ -101,7 +105,6 @@ func (p *ProxyCmd) Run() int {
 	updateTicker := time.NewTicker(1 * time.Second)
 	updateSent := make(chan struct{})
 	stopped := false
-	startTime := time.Now()
 	sentFirstUpdate := false
 
 	go func() {
@@ -142,7 +145,8 @@ func (p *ProxyCmd) Run() int {
 
 	// Assemble the log message
 	msg := types.LogMessage{
-		Timestamp:  time.Now(),
+		StartTime:  startTime,
+		ExitTime:   time.Now(),
 		PID:        os.Getpid(),
 		PPID:       os.Getppid(),
 		Alias:      p.CmdName,
@@ -178,7 +182,8 @@ func (p *ProxyCmd) sendToServer(addr string, msg types.LogMessage) {
 
 func (p *ProxyCmd) sendRunningUpdate(stdinBuf, stdoutBuf, stderrBuf *SafeBuffer, env []string) {
 	msg := types.LogMessage{
-		Timestamp:  time.Now(),
+		StartTime:  p.StartTime,
+		ExitTime:   time.Time{}, // zero time for running
 		PID:        os.Getpid(),
 		PPID:       os.Getppid(),
 		Alias:      p.CmdName,

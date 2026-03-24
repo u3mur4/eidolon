@@ -4,7 +4,8 @@ import "time"
 
 // LogMessage is the data structure sent from the proxy to the server.
 type LogMessage struct {
-	Timestamp  time.Time
+	StartTime  time.Time
+	ExitTime   time.Time
 	PID        int
 	PPID       int
 	Alias      string
