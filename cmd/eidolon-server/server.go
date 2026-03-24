@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/u3mur4/eidolon/pkg/common/types"
@@ -71,6 +73,20 @@ func (s *Server) Run() error {
 		return err
 	}
 	defer listener.Close()
+
+	// Stdin watcher: reads user input and prints separator lines.
+	// When user presses Enter, we print extra newlines to create visual gap
+	// in the terminal. 
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			_, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			fmt.Println(strings.Repeat("\n", 42))
+		}
+	}()
 
 	log.Printf("Eidolon server listening on %s", s.Config.Address)
 
