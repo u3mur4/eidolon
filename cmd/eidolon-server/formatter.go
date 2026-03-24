@@ -31,7 +31,9 @@ func NewLogFormatter(colors *Colors, searchText, envMode string, serverEnv []str
 }
 
 // PrintLog formats and prints a complete log message
-func (f *LogFormatter) PrintLog(msg *types.LogMessage) {
+func (f *LogFormatter) Format(msg *types.LogMessage) string {
+	var sb strings.Builder
+
 	// Header
 	hColor := f.Colors.Header
 	if msg.ExitCode != 0 {
@@ -52,13 +54,11 @@ func (f *LogFormatter) PrintLog(msg *types.LogMessage) {
 		msg.PID, msg.PPID, cmdName, statusText, msg.Timestamp.Format("15:04:05.000"))
 
 	if f.SearchText != "" {
-		hColor.Print(f.highlightSearch(headerText))
-	} else {
-		hColor.Print(headerText)
+		headerText = f.highlightSearch(headerText)
 	}
+	sb.WriteString(hColor.Sprint(headerText))
 
-	// Environment variables (one line above command)
-	f.printEnv(msg.Env)
+	sb.WriteString(f.formatEnv(msg.Env))
 
 	// Arguments
 	displayArgs := f.formatArgsForDisplay(msg.Args)
@@ -69,27 +69,31 @@ func (f *LogFormatter) PrintLog(msg *types.LogMessage) {
 
 	cmdText := fmt.Sprintf("%s %s\n", cmdToDisplay, displayArgs)
 	if f.SearchText != "" {
-		fmt.Print(f.highlightSearch(cmdText))
+		cmdText = f.highlightSearch(cmdText)
 	} else {
-		f.Colors.Cmd.Print(cmdText)
+		cmdText = f.Colors.Cmd.Sprint(cmdText)
 	}
+	sb.WriteString(cmdText)
 
 	// Stdin, Stdout, Stderr
-	f.printData(f.Colors.Stdin, "STDIN", msg.StdinData)
-	f.printData(f.Colors.Stdout, "STDOUT", msg.StdoutData)
-	f.printData(f.Colors.Stderr, "STDERR", msg.StderrData)
+	sb.WriteString(f.formatData(f.Colors.Stdin, "STDIN", msg.StdinData))
+	sb.WriteString(f.formatData(f.Colors.Stdout, "STDOUT", msg.StdoutData))
+	sb.WriteString(f.formatData(f.Colors.Stderr, "STDERR", msg.StderrData))
 
-	f.Colors.Header.Print(strings.Repeat("-", 80))
-	fmt.Println()
+	sb.WriteString(f.Colors.Header.Sprint(strings.Repeat("-", 80)))
+	sb.WriteString("\n")
+
+	return sb.String()
 }
 
-// printData prints data as a string or a hex dump based on its content
-func (f *LogFormatter) printData(c *color.Color, title string, data []byte) {
+func (f *LogFormatter) formatData(c *color.Color, title string, data []byte) string {
 	if len(data) == 0 {
-		return
+		return ""
 	}
 
-	c.Printf("%s (%d bytes)\n", title, len(data))
+	var sb strings.Builder
+
+	sb.WriteString(c.Sprintf("%s (%d bytes)\n", title, len(data)))
 
 	if f.isPrintable(data) {
 		lines := strings.Split(string(data), "\n")
@@ -98,16 +102,18 @@ func (f *LogFormatter) printData(c *color.Color, title string, data []byte) {
 			if f.SearchText != "" {
 				output = f.highlightSearch(output)
 			}
-			c.Print(output)
+			sb.WriteString(c.Sprint(output))
 
 			if i < len(lines)-1 {
-				fmt.Println()
+				sb.WriteString("\n")
 			}
 		}
-		fmt.Println()
+		sb.WriteString("\n")
 	} else {
-		f.Colors.Hex.Println(hex.Dump(data))
+		sb.WriteString(c.Sprint(hex.Dump(data)))
 	}
+
+	return sb.String()
 }
 
 // formatArgsForDisplay formats command arguments with colorization
@@ -159,9 +165,9 @@ func (f *LogFormatter) escapeBytes(data []byte) string {
 }
 
 // printEnv prints environment variables one line above the command
-func (f *LogFormatter) printEnv(env []string) {
+func (f *LogFormatter) formatEnv(env []string) string {
 	if f.EnvMode == "none" || len(env) == 0 {
-		return
+		return ""
 	}
 
 	envToPrint := env
@@ -187,16 +193,17 @@ func (f *LogFormatter) printEnv(env []string) {
 	}
 
 	if len(envToPrint) == 0 {
-		return
+		return ""
 	}
 
 	envText := strings.Join(envToPrint, " ")
 	if f.SearchText != "" {
-		fmt.Print(f.highlightSearch(envText))
+		envText = f.highlightSearch(envText)
 	} else {
-		f.Colors.Env.Print(envText)
+		envText = f.Colors.Env.Sprint(envText)
 	}
-	fmt.Println()
+
+	return envText + "\n"
 }
 
 // highlightSearch highlights matching search text

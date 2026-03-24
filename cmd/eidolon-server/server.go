@@ -2,13 +2,21 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"sync"
 
 	"github.com/u3mur4/eidolon/pkg/common/types"
 )
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string {
+	return ansiRegex.ReplaceAllString(s, "")
+}
 
 // Server coordinates all components of the eidolon log server
 type Server struct {
@@ -18,6 +26,8 @@ type Server struct {
 	printMutex sync.Mutex
 	running    map[int]*types.LogMessage // PID -> running notification
 	lastOutput map[int]outputHash        // PID -> hash of last printed output
+	outputFile *os.File
+	errorFile  *os.File
 }
 
 type outputHash struct {
@@ -31,12 +41,26 @@ func NewServer(cfg *Config) *Server {
 	colors := NewColors()
 	formatter := NewLogFormatter(colors, cfg.Search, cfg.EnvMode, os.Environ())
 
+	outputFile, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Printf("Warning: Could not open output file %s: %v", cfg.Output, err)
+		outputFile = nil
+	}
+
+	errorFile, err := os.OpenFile(cfg.Error, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Printf("Warning: Could not open error file %s: %v", cfg.Error, err)
+		errorFile = nil
+	}
+
 	return &Server{
 		Config:     cfg,
 		Formatter:  formatter,
 		ServerEnv:  os.Environ(),
 		running:    make(map[int]*types.LogMessage),
 		lastOutput: make(map[int]outputHash),
+		outputFile: outputFile,
+		errorFile:  errorFile,
 	}
 }
 
@@ -101,5 +125,15 @@ func (s *Server) handleMessage(msg *types.LogMessage) {
 	s.printMutex.Lock()
 	defer s.printMutex.Unlock()
 
-	s.Formatter.PrintLog(msg)
+	output := s.Formatter.Format(msg)
+	fmt.Print(output)
+
+	// Write to files (strip ANSI)
+	if s.outputFile != nil {
+		s.outputFile.WriteString(stripANSI(output))
+	}
+
+	if s.errorFile != nil && msg.ExitCode != 0 {
+		s.errorFile.WriteString(stripANSI(output))
+	}
 }

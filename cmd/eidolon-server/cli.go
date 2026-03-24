@@ -13,6 +13,8 @@ type Config struct {
 	Search     string
 	Filter     string
 	EnvMode    string
+	Output     string
+	Error      string
 }
 
 var cfg Config
@@ -39,4 +41,6 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.Search, "search", "s", "", "Highlight matching text in output")
 	rootCmd.Flags().StringVarP(&cfg.Filter, "filter", "f", "", "Skip commands containing this text in stdin/stdout/stderr")
 	rootCmd.Flags().StringVarP(&cfg.EnvMode, "env-mode", "m", "diff", "Environment mode: all|diff|none")
+	rootCmd.Flags().StringVar(&cfg.Output, "output", "/tmp/eidolon.txt", "Output log file (all commands)")
+	rootCmd.Flags().StringVar(&cfg.Error, "error", "/tmp/eidolon_error.txt", "Error log file (non-zero exit only)")
 }
