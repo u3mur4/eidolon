@@ -63,9 +63,10 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 		msg.PID, msg.PPID, cmdName, statusText, startTime, elapsed)
 
 	if f.SearchText != "" {
-		headerText = f.highlightSearch(headerText)
+		sb.WriteString(f.highlightSearch(headerText, hColor))
+	} else {
+		sb.WriteString(hColor.Sprint(headerText))
 	}
-	sb.WriteString(hColor.Sprint(headerText))
 
 	sb.WriteString(f.formatEnv(msg.Env))
 
@@ -78,11 +79,10 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 
 	cmdText := fmt.Sprintf("%s %s\n", cmdToDisplay, displayArgs)
 	if f.SearchText != "" {
-		cmdText = f.highlightSearch(cmdText)
+		sb.WriteString(f.highlightSearch(cmdText, f.Colors.Cmd))
 	} else {
-		cmdText = f.Colors.Cmd.Sprint(cmdText)
+		sb.WriteString(f.Colors.Cmd.Sprint(cmdText))
 	}
-	sb.WriteString(cmdText)
 
 	// Stdin, Stdout, Stderr
 	sb.WriteString(f.formatData(f.Colors.Stdin, "STDIN", msg.StdinData))
@@ -109,9 +109,10 @@ func (f *LogFormatter) formatData(c *color.Color, title string, data []byte) str
 		for i, line := range lines {
 			output := f.escapeBytes([]byte(line))
 			if f.SearchText != "" {
-				output = f.highlightSearch(output)
+				sb.WriteString(f.highlightSearch(output, c))
+			} else {
+				sb.WriteString(c.Sprint(output))
 			}
-			sb.WriteString(c.Sprint(output))
 
 			if i < len(lines)-1 {
 				sb.WriteString("\n")
@@ -119,7 +120,11 @@ func (f *LogFormatter) formatData(c *color.Color, title string, data []byte) str
 		}
 		sb.WriteString("\n")
 	} else {
-		sb.WriteString(c.Sprint(hex.Dump(data)))
+		if f.SearchText != "" {
+			sb.WriteString(f.highlightSearch(hex.Dump(data), c))
+		} else {
+			sb.WriteString(c.Sprint(hex.Dump(data)))
+		}
 	}
 
 	return sb.String()
@@ -207,7 +212,7 @@ func (f *LogFormatter) formatEnv(env []string) string {
 
 	envText := strings.Join(envToPrint, " ")
 	if f.SearchText != "" {
-		envText = f.highlightSearch(envText)
+		envText = f.highlightSearch(envText, f.Colors.Env)
 	} else {
 		envText = f.Colors.Env.Sprint(envText)
 	}
@@ -215,20 +220,33 @@ func (f *LogFormatter) formatEnv(env []string) string {
 	return envText + "\n"
 }
 
-// highlightSearch highlights matching search text
-func (f *LogFormatter) highlightSearch(text string) string {
+// highlightSearch highlights matching search text with optional base color.
+// If baseColor is nil, no base color is applied to non-matching parts.
+// If search text not found, returns text with just base color applied.
+func (f *LogFormatter) highlightSearch(text string, baseColor *color.Color) string {
 	if f.SearchText == "" {
+		if baseColor != nil {
+			return baseColor.Sprint(text)
+		}
 		return text
 	}
 
 	parts := strings.Split(text, f.SearchText)
 	if len(parts) == 1 {
+		// Search text not found, just apply base color
+		if baseColor != nil {
+			return baseColor.Sprint(text)
+		}
 		return text
 	}
 
 	var result strings.Builder
 	for i, part := range parts {
-		result.WriteString(part)
+		if baseColor != nil {
+			result.WriteString(baseColor.Sprint(part))
+		} else {
+			result.WriteString(part)
+		}
 		if i < len(parts)-1 {
 			result.WriteString(f.Colors.Highlight.Sprint(f.SearchText))
 		}
