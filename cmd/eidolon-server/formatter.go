@@ -43,8 +43,14 @@ func (f *LogFormatter) PrintLog(msg *types.LogMessage) {
 		cmdName = fmt.Sprintf("%s -> %s", msg.Alias, msg.Path)
 	}
 
-	headerText := fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n",
-		msg.PID, msg.PPID, cmdName, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	var headerText string
+	if msg.Status == "running" {
+		headerText = fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |STATUS: running |TIME: %s\n",
+			msg.PID, msg.PPID, cmdName, msg.Timestamp.Format("15:04:05.000"))
+	} else {
+		headerText = fmt.Sprintf("PID: %d |PPID: %d |CMD: %s |EXIT: %d |TIME: %s\n",
+			msg.PID, msg.PPID, cmdName, msg.ExitCode, msg.Timestamp.Format("15:04:05.000"))
+	}
 
 	if f.SearchText != "" {
 		hColor.Print(f.highlightSearch(headerText))

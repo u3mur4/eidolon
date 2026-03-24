@@ -96,8 +96,34 @@ func (p *ProxyCmd) Run() int {
 		io.Copy(io.MultiWriter(os.Stderr, &stderrBuf), stderrPipe)
 	}()
 
-	// Wait for all I/O to complete
+	updateTicker := time.NewTicker(1 * time.Second)
+	updateSent := make(chan struct{})
+	stopped := false
+	startTime := time.Now()
+	sentFirstUpdate := false
+
+	go func() {
+		for {
+			select {
+			case <-updateTicker.C:
+				if stopped {
+					return
+				}
+				if !sentFirstUpdate && time.Since(startTime) < 1*time.Second {
+					continue
+				}
+				sentFirstUpdate = true
+				p.sendRunningUpdate(&stdinBuf, &stdoutBuf, &stderrBuf, cmd.Env)
+			case <-updateSent:
+				return
+			}
+		}
+	}()
+
 	wg.Wait()
+	updateTicker.Stop()
+	stopped = true
+	close(updateSent)
 
 	// Wait for the command to exit and capture its status
 	err = cmd.Wait()
@@ -125,6 +151,7 @@ func (p *ProxyCmd) Run() int {
 		StdinData:  stdinBuf.Bytes(),
 		StdoutData: stdoutBuf.Bytes(),
 		StderrData: stderrBuf.Bytes(),
+		Status:     "completed",
 	}
 
 	// Send the message to the log server
@@ -145,4 +172,21 @@ func (p *ProxyCmd) sendToServer(addr string, msg types.LogMessage) {
 	if err := encoder.Encode(&msg); err != nil {
 		log.Printf("eidolon: Failed to send log message: %v", err)
 	}
+}
+
+func (p *ProxyCmd) sendRunningUpdate(stdinBuf, stdoutBuf, stderrBuf *SafeBuffer, env []string) {
+	msg := types.LogMessage{
+		Timestamp:  time.Now(),
+		PID:        os.Getpid(),
+		PPID:       os.Getppid(),
+		Alias:      p.CmdName,
+		Path:       p.Context.Path,
+		Args:       p.Context.Args,
+		Env:        env,
+		StdinData:  stdinBuf.Bytes(),
+		StdoutData: stdoutBuf.Bytes(),
+		StderrData: stderrBuf.Bytes(),
+		Status:     "running",
+	}
+	p.sendToServer(p.ServerAddr, msg)
 }

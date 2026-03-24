@@ -16,6 +16,14 @@ type Server struct {
 	Formatter  *LogFormatter
 	ServerEnv  []string
 	printMutex sync.Mutex
+	running    map[int]*types.LogMessage // PID -> running notification
+	lastOutput map[int]outputHash        // PID -> hash of last printed output
+}
+
+type outputHash struct {
+	stdin  string
+	stdout string
+	stderr string
 }
 
 // NewServer creates a new server instance with the given configuration
@@ -24,9 +32,11 @@ func NewServer(cfg *Config) *Server {
 	formatter := NewLogFormatter(colors, cfg.Search, cfg.EnvMode, os.Environ())
 
 	return &Server{
-		Config:    cfg,
-		Formatter: formatter,
-		ServerEnv: os.Environ(),
+		Config:     cfg,
+		Formatter:  formatter,
+		ServerEnv:  os.Environ(),
+		running:    make(map[int]*types.LogMessage),
+		lastOutput: make(map[int]outputHash),
 	}
 }
 
@@ -52,17 +62,39 @@ func (s *Server) Run() error {
 
 // handleMessage processes a single log message
 func (s *Server) handleMessage(msg *types.LogMessage) {
-	// Apply filters
-	if s.Config.OnlyErrors && msg.ExitCode == 0 {
-		return
-	}
-
-	if s.Config.Filter != "" {
-		if bytes.Contains(msg.StdinData, []byte(s.Config.Filter)) ||
-			bytes.Contains(msg.StdoutData, []byte(s.Config.Filter)) ||
-			bytes.Contains(msg.StderrData, []byte(s.Config.Filter)) {
+	// Apply filters only for completed messages
+	if msg.Status == "completed" {
+		if s.Config.OnlyErrors && msg.ExitCode == 0 {
 			return
 		}
+
+		if s.Config.Filter != "" {
+			if bytes.Contains(msg.StdinData, []byte(s.Config.Filter)) ||
+				bytes.Contains(msg.StdoutData, []byte(s.Config.Filter)) ||
+				bytes.Contains(msg.StderrData, []byte(s.Config.Filter)) {
+				return
+			}
+		}
+
+		// Remove from running map when completed
+		s.printMutex.Lock()
+		delete(s.running, msg.PID)
+		delete(s.lastOutput, msg.PID)
+		s.printMutex.Unlock()
+	} else if msg.Status == "running" {
+		s.printMutex.Lock()
+		currentHash := outputHash{
+			stdin:  string(msg.StdinData),
+			stdout: string(msg.StdoutData),
+			stderr: string(msg.StderrData),
+		}
+		if last, ok := s.lastOutput[msg.PID]; ok && last == currentHash {
+			s.printMutex.Unlock()
+			return
+		}
+		s.running[msg.PID] = msg
+		s.lastOutput[msg.PID] = currentHash
+		s.printMutex.Unlock()
 	}
 
 	// Print with mutex to prevent interleaved output

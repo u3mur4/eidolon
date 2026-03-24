@@ -15,4 +15,5 @@ type LogMessage struct {
 	StdinData  []byte
 	StdoutData []byte
 	StderrData []byte
+	Status     string // "running" or "completed"
 }
