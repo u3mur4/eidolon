@@ -270,11 +270,17 @@ func (f *LogFormatter) isPrintable(data []byte) bool {
 }
 
 func (f *LogFormatter) formatDuration(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
+	if d < time.Millisecond {
+		// < 1ms: show microseconds with 1 decimal
+		return fmt.Sprintf("%.1fμs", float64(d.Microseconds()))
+	} else if d < time.Second {
+		// 1ms - 1s: show milliseconds with 1 decimal
+		return fmt.Sprintf("%.1fms", d.Seconds()*1000)
 	} else if d < 60*time.Second {
+		// 1s - 60s: show seconds with 1 decimal
 		return fmt.Sprintf("%.1fs", d.Seconds())
 	} else {
+		// >= 60s: show minutes and seconds
 		mins := int(d.Minutes())
 		secs := int(d.Seconds()) % 60
 		if mins > 0 && secs > 0 {
