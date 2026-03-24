@@ -2,8 +2,12 @@ package main
 
 import (
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 )
+
+var interrupted bool
 
 func main() {
 	// 1. Get command name and arguments
@@ -32,7 +36,19 @@ func main() {
 		CmdName:    executableName,
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		interrupted = true
+		proxy.SendInterrupted()
+	}()
+
 	exitStatus := proxy.Run()
+
+	if interrupted {
+		exitStatus = 1
+	}
 
 	// 5. Finally, exit with the same code as the real command
 	os.Exit(exitStatus)

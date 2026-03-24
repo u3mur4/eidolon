@@ -36,6 +36,7 @@ type ProxyCmd struct {
 	ServerAddr string
 	Context    *CommandContext
 	CmdName    string // Original name for logging
+	Cmd        *exec.Cmd
 }
 
 func (p *ProxyCmd) Run() int {
@@ -45,6 +46,7 @@ func (p *ProxyCmd) Run() int {
 		return 1
 	}
 
+	p.Cmd = cmd
 	// The buffered data
 	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
 
@@ -189,4 +191,10 @@ func (p *ProxyCmd) sendRunningUpdate(stdinBuf, stdoutBuf, stderrBuf *SafeBuffer,
 		Status:     "running",
 	}
 	p.sendToServer(p.ServerAddr, msg)
+}
+
+func (p *ProxyCmd) SendInterrupted() {
+	if p.Cmd != nil {
+		p.Cmd.Process.Kill()
+	}
 }
