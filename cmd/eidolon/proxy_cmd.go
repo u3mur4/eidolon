@@ -120,6 +120,7 @@ func (p *ProxyCmd) Run() int {
 		Alias:      p.CmdName,
 		Path:       p.Context.Path,
 		Args:       p.Context.Args,
+		Env:        cmd.Env,
 		ExitCode:   exitCode,
 		StdinData:  stdinBuf.Bytes(),
 		StdoutData: stdoutBuf.Bytes(),

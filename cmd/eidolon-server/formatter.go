@@ -16,13 +16,17 @@ import (
 type LogFormatter struct {
 	Colors     *Colors
 	SearchText string
+	EnvMode    string
+	ServerEnv  []string
 }
 
 // NewLogFormatter creates a new formatter with the given colors and search text
-func NewLogFormatter(colors *Colors, searchText string) *LogFormatter {
+func NewLogFormatter(colors *Colors, searchText, envMode string, serverEnv []string) *LogFormatter {
 	return &LogFormatter{
 		Colors:     colors,
 		SearchText: searchText,
+		EnvMode:    envMode,
+		ServerEnv:  serverEnv,
 	}
 }
 
@@ -47,6 +51,9 @@ func (f *LogFormatter) PrintLog(msg *types.LogMessage) {
 	} else {
 		hColor.Print(headerText)
 	}
+
+	// Environment variables (one line above command)
+	f.printEnv(msg.Env)
 
 	// Arguments
 	displayArgs := f.formatArgsForDisplay(msg.Args)
@@ -144,6 +151,47 @@ func (f *LogFormatter) escapeBytes(data []byte) string {
 		}
 	}
 	return processed.String()
+}
+
+// printEnv prints environment variables one line above the command
+func (f *LogFormatter) printEnv(env []string) {
+	if f.EnvMode == "none" || len(env) == 0 {
+		return
+	}
+
+	envToPrint := env
+
+	if f.EnvMode == "diff" {
+		serverEnvSet := make(map[string]bool)
+		for _, e := range f.ServerEnv {
+			if idx := strings.Index(e, "="); idx != -1 {
+				serverEnvSet[e[:idx]] = true
+			}
+		}
+
+		var filtered []string
+		for _, e := range env {
+			if idx := strings.Index(e, "="); idx != -1 {
+				key := e[:idx]
+				if !serverEnvSet[key] {
+					filtered = append(filtered, e)
+				}
+			}
+		}
+		envToPrint = filtered
+	}
+
+	if len(envToPrint) == 0 {
+		return
+	}
+
+	envText := strings.Join(envToPrint, " ")
+	if f.SearchText != "" {
+		fmt.Print(f.highlightSearch(envText))
+	} else {
+		f.Colors.Env.Print(envText)
+	}
+	fmt.Println()
 }
 
 // highlightSearch highlights matching search text

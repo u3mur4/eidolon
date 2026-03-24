@@ -12,6 +12,7 @@ type Config struct {
 	OnlyErrors bool
 	Search     string
 	Filter     string
+	EnvMode    string
 }
 
 var cfg Config
@@ -37,4 +38,5 @@ func init() {
 	rootCmd.Flags().BoolVarP(&cfg.OnlyErrors, "only-errors", "e", false, "Show only non-zero exit codes")
 	rootCmd.Flags().StringVarP(&cfg.Search, "search", "s", "", "Highlight matching text in output")
 	rootCmd.Flags().StringVarP(&cfg.Filter, "filter", "f", "", "Skip commands containing this text in stdin/stdout/stderr")
+	rootCmd.Flags().StringVarP(&cfg.EnvMode, "env-mode", "m", "diff", "Environment mode: all|diff|none")
 }

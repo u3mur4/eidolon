@@ -10,6 +10,7 @@ type LogMessage struct {
 	Alias      string
 	Path       string
 	Args       []string
+	Env        []string
 	ExitCode   int
 	StdinData  []byte
 	StdoutData []byte

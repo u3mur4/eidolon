@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/u3mur4/eidolon/pkg/common/types"
@@ -13,17 +14,19 @@ import (
 type Server struct {
 	Config     *Config
 	Formatter  *LogFormatter
+	ServerEnv  []string
 	printMutex sync.Mutex
 }
 
 // NewServer creates a new server instance with the given configuration
 func NewServer(cfg *Config) *Server {
 	colors := NewColors()
-	formatter := NewLogFormatter(colors, cfg.Search)
+	formatter := NewLogFormatter(colors, cfg.Search, cfg.EnvMode, os.Environ())
 
 	return &Server{
 		Config:    cfg,
 		Formatter: formatter,
+		ServerEnv: os.Environ(),
 	}
 }
 

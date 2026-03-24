@@ -16,6 +16,7 @@ type Colors struct {
 	Arg         *color.Color
 	SpecialChar *color.Color
 	Highlight   *color.Color
+	Env         *color.Color
 }
 
 // NewColors creates a new Colors instance with all color definitions
@@ -33,5 +34,6 @@ func NewColors() *Colors {
 		Arg:         color.New(color.FgHiGreen),
 		SpecialChar: color.New(color.FgHiMagenta, color.Bold),
 		Highlight:   color.New(color.BgYellow, color.FgBlack),
+		Env:         color.New(color.FgMagenta),
 	}
 }
