@@ -91,7 +91,7 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 		cmdToDisplay = msg.Path
 	}
 
-	var cmdSegments[]Segment
+	var cmdSegments []Segment
 	cmdSegments = append(cmdSegments, f.tokenize(cmdToDisplay, f.Colors.Cmd)...)
 	if len(msg.Args) > 0 {
 		cmdSegments = append(cmdSegments, Segment{Text: " ", Style: Style{BaseColor: f.Colors.Cmd}})
@@ -102,10 +102,23 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 	cmdSegments = f.applyStyles(cmdSegments)
 	f.render(&sb, cmdSegments)
 
-	// Stdin, Stdout, Stderr
-	sb.WriteString(f.formatData(f.Colors.Stdin, "STDIN", msg.StdinData))
-	sb.WriteString(f.formatData(f.Colors.Stdout, "STDOUT", msg.StdoutData))
-	sb.WriteString(f.formatData(f.Colors.Stderr, "STDERR", msg.StderrData))
+	// Stdin, Stdout, Stderr - interleaved in order
+	for _, entry := range msg.IOData {
+		var c *color.Color
+		var title string
+		switch entry.Source {
+		case types.IOSourceStdin:
+			c = f.Colors.Stdin
+			title = "STDIN"
+		case types.IOSourceStdout:
+			c = f.Colors.Stdout
+			title = "STDOUT"
+		case types.IOSourceStderr:
+			c = f.Colors.Stderr
+			title = "STDERR"
+		}
+		sb.WriteString(f.formatData(c, title, entry.Data))
+	}
 
 	// Separator
 	separatorSegments := f.tokenize(strings.Repeat("-", 80)+"\n", f.Colors.Header)
@@ -116,7 +129,7 @@ func (f *LogFormatter) Format(msg *types.LogMessage) string {
 
 // tokenize breaks text into safe-to-print string chunks and identifies non-printable special chars
 func (f *LogFormatter) tokenize(text string, baseColor *color.Color) []Segment {
-	var segments[]Segment
+	var segments []Segment
 	var currentText strings.Builder
 
 	for i := 0; i < len(text); i++ {
@@ -147,7 +160,7 @@ func (f *LogFormatter) tokenize(text string, baseColor *color.Color) []Segment {
 }
 
 // applyStyles maps search terms onto existing segments and breaks them up if necessary
-func (f *LogFormatter) applyStyles(segments []Segment)[]Segment {
+func (f *LogFormatter) applyStyles(segments []Segment) []Segment {
 	if f.SearchText == "" || len(segments) == 0 {
 		return segments
 	}
@@ -175,7 +188,7 @@ func (f *LogFormatter) applyStyles(segments []Segment)[]Segment {
 		return segments
 	}
 
-	var result[]Segment
+	var result []Segment
 	charIndex := 0
 
 	for _, seg := range segments {
@@ -238,7 +251,7 @@ func (f *LogFormatter) applyStyles(segments []Segment)[]Segment {
 }
 
 // render iterates over styled segments and applies ANSI codes in a single pass based on priority
-func (f *LogFormatter) render(sb *strings.Builder, segments[]Segment) {
+func (f *LogFormatter) render(sb *strings.Builder, segments []Segment) {
 	for _, seg := range segments {
 		if seg.Text == "" {
 			continue
@@ -264,7 +277,7 @@ func (f *LogFormatter) render(sb *strings.Builder, segments[]Segment) {
 }
 
 // formatData handles STDIN/STDOUT/STDERR payloads, properly managing printability and hex dumps
-func (f *LogFormatter) formatData(c *color.Color, title string, data[]byte) string {
+func (f *LogFormatter) formatData(c *color.Color, title string, data []byte) string {
 	if len(data) == 0 {
 		return ""
 	}
@@ -295,7 +308,7 @@ func (f *LogFormatter) formatData(c *color.Color, title string, data[]byte) stri
 
 // formatArgsForDisplaySegments parses args into structured segments containing correct styles
 func (f *LogFormatter) formatArgsForDisplaySegments(args []string) []Segment {
-	var segments[]Segment
+	var segments []Segment
 	prevWasFlag := false
 
 	for i, arg := range args {
@@ -336,7 +349,7 @@ func (f *LogFormatter) formatArgsForDisplaySegments(args []string) []Segment {
 }
 
 // formatEnvSegments applies specific diff logic/formatting to environment variables
-func (f *LogFormatter) formatEnvSegments(env []string)[]Segment {
+func (f *LogFormatter) formatEnvSegments(env []string) []Segment {
 	if f.EnvMode == "none" || len(env) == 0 {
 		return nil
 	}

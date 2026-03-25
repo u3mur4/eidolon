@@ -20,6 +20,18 @@ func stripANSI(s string) string {
 	return ansiRegex.ReplaceAllString(s, "")
 }
 
+func (s *Server) entriesEqual(a, b []types.IOEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Source != b[i].Source || !bytes.Equal(a[i].Data, b[i].Data) {
+			return false
+		}
+	}
+	return true
+}
+
 // Server coordinates all components of the eidolon log server
 type Server struct {
 	Config     *Config
@@ -33,9 +45,7 @@ type Server struct {
 }
 
 type outputHash struct {
-	stdin  string
-	stdout string
-	stderr string
+	entries []types.IOEntry
 }
 
 // NewServer creates a new server instance with the given configuration
@@ -76,7 +86,7 @@ func (s *Server) Run() error {
 
 	// Stdin watcher: reads user input and prints separator lines.
 	// When user presses Enter, we print extra newlines to create visual gap
-	// in the terminal. 
+	// in the terminal.
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -109,10 +119,11 @@ func (s *Server) handleMessage(msg *types.LogMessage) {
 		}
 
 		if s.Config.Filter != "" {
-			if bytes.Contains(msg.StdinData, []byte(s.Config.Filter)) ||
-				bytes.Contains(msg.StdoutData, []byte(s.Config.Filter)) ||
-				bytes.Contains(msg.StderrData, []byte(s.Config.Filter)) {
-				return
+			filterBytes := []byte(s.Config.Filter)
+			for _, entry := range msg.IOData {
+				if bytes.Contains(entry.Data, filterBytes) {
+					return
+				}
 			}
 		}
 
@@ -124,11 +135,9 @@ func (s *Server) handleMessage(msg *types.LogMessage) {
 	} else if msg.Status == "running" {
 		s.printMutex.Lock()
 		currentHash := outputHash{
-			stdin:  string(msg.StdinData),
-			stdout: string(msg.StdoutData),
-			stderr: string(msg.StderrData),
+			entries: msg.IOData,
 		}
-		if last, ok := s.lastOutput[msg.PID]; ok && last == currentHash {
+		if last, ok := s.lastOutput[msg.PID]; ok && s.entriesEqual(last.entries, currentHash.entries) {
 			s.printMutex.Unlock()
 			return
 		}

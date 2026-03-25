@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/gob"
 	"io"
 	"log"
@@ -15,21 +14,39 @@ import (
 	"github.com/u3mur4/eidolon/pkg/common/types"
 )
 
-type SafeBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
+type IOBuffer struct {
+	mu      sync.Mutex
+	entries []types.IOEntry
 }
 
-func (s *SafeBuffer) Write(p []byte) (n int, err error) {
+func (s *IOBuffer) WriteEntry(source types.IOSource, data []byte) {
+	if len(data) == 0 {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.buf.Write(p)
+
+	if len(s.entries) > 0 && s.entries[len(s.entries)-1].Source == source {
+		s.entries[len(s.entries)-1].Data = append(s.entries[len(s.entries)-1].Data, data...)
+	} else {
+		s.entries = append(s.entries, types.IOEntry{
+			Source: source,
+			Data:   append([]byte(nil), data...),
+		})
+	}
 }
 
-func (s *SafeBuffer) Bytes() []byte {
+func (s *IOBuffer) Entries() []types.IOEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]byte(nil), s.buf.Bytes()...)
+	return append([]types.IOEntry(nil), s.entries...)
+}
+
+type writeFunc func(p []byte)
+
+func (f writeFunc) Write(p []byte) (n int, err error) {
+	f(p)
+	return len(p), nil
 }
 
 type ProxyCmd struct {
@@ -48,8 +65,8 @@ func (p *ProxyCmd) Run() int {
 	}
 
 	p.Cmd = cmd
-	// The buffered data
-	var stdinBuf, stdoutBuf, stderrBuf SafeBuffer
+	// The ordered buffered data
+	var ioBuffer IOBuffer
 
 	// Create pipes for I/O
 	stdinPipe, err := cmd.StdinPipe()
@@ -84,22 +101,28 @@ func (p *ProxyCmd) Run() int {
 	// Goroutine 1: Handle stdin
 	go func() {
 		defer stdinPipe.Close()
-		// Copy from our real stdin to both the command's stdin and our buffer
-		io.Copy(io.MultiWriter(stdinPipe, &stdinBuf), os.Stdin)
+		stdinWriter := io.MultiWriter(stdinPipe, writeFunc(func(p []byte) {
+			ioBuffer.WriteEntry(types.IOSourceStdin, p)
+		}))
+		io.Copy(stdinWriter, os.Stdin)
 	}()
 
 	// Goroutine 2: Handle stdout
 	go func() {
 		defer wg.Done()
-		// Copy from the command's stdout to both our real stdout and our buffer
-		io.Copy(io.MultiWriter(os.Stdout, &stdoutBuf), stdoutPipe)
+		stdoutWriter := io.MultiWriter(os.Stdout, writeFunc(func(p []byte) {
+			ioBuffer.WriteEntry(types.IOSourceStdout, p)
+		}))
+		io.Copy(stdoutWriter, stdoutPipe)
 	}()
 
 	// Goroutine 3: Handle stderr
 	go func() {
 		defer wg.Done()
-		// Copy from the command's stderr to both our real stderr and our buffer
-		io.Copy(io.MultiWriter(os.Stderr, &stderrBuf), stderrPipe)
+		stderrWriter := io.MultiWriter(os.Stderr, writeFunc(func(p []byte) {
+			ioBuffer.WriteEntry(types.IOSourceStderr, p)
+		}))
+		io.Copy(stderrWriter, stderrPipe)
 	}()
 
 	updateTicker := time.NewTicker(1 * time.Second)
@@ -118,7 +141,7 @@ func (p *ProxyCmd) Run() int {
 					continue
 				}
 				sentFirstUpdate = true
-				p.sendRunningUpdate(&stdinBuf, &stdoutBuf, &stderrBuf, cmd.Env)
+				p.sendRunningUpdate(&ioBuffer, cmd.Env)
 			case <-updateSent:
 				return
 			}
@@ -145,19 +168,17 @@ func (p *ProxyCmd) Run() int {
 
 	// Assemble the log message
 	msg := types.LogMessage{
-		StartTime:  startTime,
-		ExitTime:   time.Now(),
-		PID:        os.Getpid(),
-		PPID:       os.Getppid(),
-		Alias:      p.CmdName,
-		Path:       p.Context.Path,
-		Args:       p.Context.Args,
-		Env:        cmd.Env,
-		ExitCode:   exitCode,
-		StdinData:  stdinBuf.Bytes(),
-		StdoutData: stdoutBuf.Bytes(),
-		StderrData: stderrBuf.Bytes(),
-		Status:     "completed",
+		StartTime: startTime,
+		ExitTime:  time.Now(),
+		PID:       os.Getpid(),
+		PPID:      os.Getppid(),
+		Alias:     p.CmdName,
+		Path:      p.Context.Path,
+		Args:      p.Context.Args,
+		Env:       cmd.Env,
+		ExitCode:  exitCode,
+		IOData:    ioBuffer.Entries(),
+		Status:    "completed",
 	}
 
 	// Send the message to the log server
@@ -180,20 +201,18 @@ func (p *ProxyCmd) sendToServer(addr string, msg types.LogMessage) {
 	}
 }
 
-func (p *ProxyCmd) sendRunningUpdate(stdinBuf, stdoutBuf, stderrBuf *SafeBuffer, env []string) {
+func (p *ProxyCmd) sendRunningUpdate(ioBuffer *IOBuffer, env []string) {
 	msg := types.LogMessage{
-		StartTime:  p.StartTime,
-		ExitTime:   time.Time{}, // zero time for running
-		PID:        os.Getpid(),
-		PPID:       os.Getppid(),
-		Alias:      p.CmdName,
-		Path:       p.Context.Path,
-		Args:       p.Context.Args,
-		Env:        env,
-		StdinData:  stdinBuf.Bytes(),
-		StdoutData: stdoutBuf.Bytes(),
-		StderrData: stderrBuf.Bytes(),
-		Status:     "running",
+		StartTime: p.StartTime,
+		ExitTime:  time.Time{}, // zero time for running
+		PID:       os.Getpid(),
+		PPID:      os.Getppid(),
+		Alias:     p.CmdName,
+		Path:      p.Context.Path,
+		Args:      p.Context.Args,
+		Env:       env,
+		IOData:    ioBuffer.Entries(),
+		Status:    "running",
 	}
 	p.sendToServer(p.ServerAddr, msg)
 }
